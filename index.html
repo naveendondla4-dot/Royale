@@ -1,0 +1,124 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<meta name="theme-color" content="#0b1015">
+<title>Zone Royale</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Rajdhani:wght@500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<canvas id="view"></canvas>
+
+<!-- ============ in-game HUD ============ -->
+<div id="hud" class="hidden">
+  <div id="topbar">
+    <span class="pill"><i class="ic">&#128100;</i><b id="alive">30</b></span>
+    <span class="pill"><i class="ic">&#9760;</i><b id="kills">0</b></span>
+    <span class="pill" id="zoneTxt">Zone</span>
+  </div>
+  <div id="loc"></div>
+  <div id="stats">
+    <div class="bar" id="hpBar"><div id="hpFill"></div><span id="hpNum">100</span></div>
+    <div class="bar thin" id="arBar"><div id="arFill"></div></div>
+    <div id="medRow"><span class="med">&#10010;</span> <b id="medCount">0</b></div>
+  </div>
+  <div id="weaponBox">
+    <div id="wName">Sidekick</div>
+    <div id="wAmmo"></div>
+    <div id="slots"></div>
+    <div id="reloadTxt">RELOADING</div>
+  </div>
+  <canvas id="minimap" width="220" height="220"></canvas>
+  <div id="killfeed"></div>
+  <div id="cross"><i></i><i></i><i></i><i></i></div>
+  <div id="hitmark"><i></i><i></i><i></i><i></i></div>
+  <div id="prompt"></div>
+  <div id="banner"></div>
+  <div id="healBar"><div id="healBarFill"></div><span>HEALING</span></div>
+  <div id="dirs"></div>
+  <div id="dmgv"></div>
+  <div id="zonev"><span>OUTSIDE THE SAFE ZONE</span></div>
+  <div id="scopeov"></div>
+  <div id="specBar" class="hidden"><span id="specName"></span><button id="btnNext">Next player</button><button id="btnLeave">Exit</button></div>
+</div>
+
+<!-- ============ touch controls ============ -->
+<div id="touch" class="hidden">
+  <div id="lookpad"></div>
+  <div id="joyzone"><div id="joyBase"><div id="joyKnob"></div></div></div>
+  <button class="tb" data-act="fire">FIRE</button>
+  <button class="tb sm" data-act="jump">JUMP</button>
+  <button class="tb sm" data-act="sit">SIT</button>
+  <button class="tb sm" data-act="scope">4x</button>
+  <button class="tb sm" data-act="reload">RELOAD</button>
+  <button class="tb sm" data-act="heal">HEAL</button>
+  <button class="tb sm" data-act="swap">SWAP</button>
+  <button class="tb sm" data-act="run">RUN</button>
+  <button class="tb pick" id="pickBtn" data-act="pick">PICK</button>
+  <button class="tb top p" data-act="pause">&#10073;&#10073;</button>
+</div>
+
+<div id="bigmap" class="hidden"><canvas id="bigmapCv" width="620" height="620"></canvas><div class="hint">Yellow arrow = you &middot; blue ring = safe zone &middot; white ring = next zone &middot; press M to close</div></div>
+
+<!-- ============ screens ============ -->
+<div id="menu" class="screen">
+  <div class="card">
+    <h1>ZONE <em>ROYALE</em></h1>
+    <p class="sub">30 players drop. One survives. Stay inside the shrinking circle.</p>
+    <label>Your name<input id="nameIn" maxlength="14" value="Player" autocomplete="off"></label>
+    <div class="row"><span>Graphics</span>
+      <div class="seg" id="qSeg"><button class="qbtn" data-q="low">Low</button><button class="qbtn" data-q="medium">Medium</button><button class="qbtn" data-q="high">High</button></div></div>
+    <div class="row"><span>Look sensitivity</span><input type="range" id="sens" min="0.4" max="2.2" step="0.05" value="1"></div>
+    <div class="row"><span>Volume</span><input type="range" id="vol" min="0" max="1" step="0.05" value="0.7"></div>
+    <button id="btnPlay" class="big">PLAY</button>
+    <div class="help" id="helpKb"><b>Keyboard + mouse:</b> WASD move &middot; mouse aim &middot; click fire &middot; right-click / Z scope &middot; Shift run &middot; Space jump &middot; C crouch &middot; R reload &middot; E pick up &middot; Q or 1/2 swap &middot; H heal &middot; M map &middot; Esc pause</div>
+    <div class="help" id="helpTouch"><b>Touch:</b> left stick moves &middot; drag the right side to aim &middot; FIRE button (drag while holding to aim) &middot; buttons for jump, crouch, scope, reload, heal, swap, run</div>
+    <div class="tip">You start in the air: steer toward a house, the parachute opens by itself. Pick up loot, hunt, and survive.</div>
+  </div>
+</div>
+
+<div id="pause" class="screen hidden">
+  <div class="card small">
+    <h2>PAUSED</h2>
+    <button id="btnResume" class="big">RESUME</button>
+    <button id="btnMute" class="alt">Sound: ON</button>
+    <button id="btnGfx" class="alt">Change graphics (restarts)</button>
+    <button id="btnQuit" class="alt">Quit to menu</button>
+  </div>
+</div>
+
+<div id="end" class="screen hidden">
+  <div class="card small">
+    <h2 id="endTitle">ELIMINATED</h2>
+    <p class="sub" id="endSub"></p>
+    <div id="endStats"></div>
+    <button id="btnAgain" class="big">PLAY AGAIN</button>
+    <button id="btnSpectate" class="alt">Spectate</button>
+    <button id="btnMenu" class="alt">Main menu</button>
+  </div>
+</div>
+
+<div id="loading" class="screen hidden"><div class="spin"></div><div id="loadTxt">Loading...</div></div>
+<div id="err" class="screen hidden"><div class="card small"><h2>Something went wrong</h2><p id="errTxt"></p><button class="big" onclick="location.reload()">Reload</button></div></div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script>window.THREE || document.write('<script src="js/vendor/three.min.js"><\/script>')</script>
+<script src="js/config.js"></script>
+<script src="js/buildings.js"></script>
+<script src="js/world.js"></script>
+<script src="js/state.js"></script>
+<script src="js/bots.js"></script>
+<script src="js/network.js"></script>
+<script src="js/input.js"></script>
+<script src="js/audio.js"></script>
+<script src="js/render_world.js"></script>
+<script src="js/render_actors.js"></script>
+<script src="js/renderer.js"></script>
+<script src="js/hud.js"></script>
+<script src="js/game.js"></script>
+</body>
+</html>
