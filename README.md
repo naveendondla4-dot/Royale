@@ -19,6 +19,15 @@ It needs internet for two things: the Three.js library (loaded from cdnjs, versi
 
 URL options: `?seed=123` (different island), `?q=low|medium|high`, `?touch=1` (force touch controls), `?auto=1` (skip the menu).
 
+## Put it online (GitHub Pages) and install as an app
+
+Easiest, works from a phone: run `python3 build_single.py`, or take the ready `dist/` files. Upload these 5 files (no folders) to the root of a public GitHub repo:
+`index.html`, `manifest.json`, `sw.js`, `icon-192.png`, `icon-512.png` (plus `icon-maskable-512.png`). Then Settings -> Pages -> branch main, folder / (root).
+
+Open the site link on the phone. The menu shows **Install as app** (Android Chrome opens the install prompt; on iPhone use Share -> Add to Home Screen). The installed app opens fullscreen in landscape and works offline after the first visit.
+
+If PLAY does nothing, the page now says on screen which file or library did not load.
+
 ## Controls
 
 | | Desktop | Phone |
@@ -33,7 +42,7 @@ URL options: `?seed=123` (different island), `?q=low|medium|high`, `?touch=1` (f
 | Big map | M | tap the minimap |
 | Pause | Esc | pause button |
 
-You start in the air. Steer toward a building; the parachute opens by itself at 60 m. Ammo, medkits and armor are picked up by walking over them. Weapons need a pick-up press.
+You jump from a cargo plane. While you fall and glide the camera is behind you (you see yourself, the full parachute and the plane); look up/down to swing it around. The parachute opens by itself at 60 m and the view returns to first person when you land. Steer toward a building. Ammo, medkits and armor are picked up by walking over them. Weapons need a pick-up press.
 
 ## Files
 

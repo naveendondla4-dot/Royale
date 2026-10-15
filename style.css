@@ -95,3 +95,9 @@ body.touch #helpKb { display: none; } body:not(.touch) #helpTouch { display: non
 #endStats { display: flex; justify-content: center; gap: 22px; margin: 10px 0 6px; font-size: 18px; } #endStats b { display: block; font-size: 30px; color: var(--acc2); }
 #bigmap { position: fixed; inset: 0; z-index: 15; display: flex; flex-direction: column; align-items: center; justify-content: center; background: rgba(0, 0, 0, 0.72); pointer-events: auto; } #bigmap canvas { height: min(84vh, 92vw); width: auto; aspect-ratio: 1; border: 3px solid #fff; border-radius: 6px; } #bigmap .hint { margin-top: 8px; font-size: 14px; opacity: 0.8; }
 @media (max-height: 420px) { .card { padding: 10px 16px; } .help, .tip { display: none; } h1 { font-size: 34px; } .sub { margin: 2px 0 6px; } .row { margin: 6px 0; } button.big { padding: 8px; font-size: 22px; } }
+
+#btnInstall { margin-top: 8px; } #installHelp { text-align: center; color: var(--acc2); opacity: 1; }
+#glwarn { position: fixed; left: 50%; bottom: 8px; transform: translateX(-50%); z-index: 25; background: rgba(160, 30, 20, 0.9); border: 1px solid #ff9a8a; border-radius: 8px; padding: 4px 12px; font-size: 14px; font-weight: 700; }
+
+.build { margin-top: 8px; font-size: 12px; opacity: 0.55; text-align: center; letter-spacing: 1px; }
+@media (max-height: 500px) { .kf { font-size: 12px; padding: 1px 7px; } .kf i { font-size: 11px; } #killfeed { max-width: 38vw; } }

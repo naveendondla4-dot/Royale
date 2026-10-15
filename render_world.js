@@ -224,7 +224,7 @@
         'void main(){ float h = vP.y; vec3 up = mix(mid, top, smoothstep(0.15, 0.85, h)); vec3 c = mix(hor, up, smoothstep(0.0, 0.4, h)); if (h < 0.0) c = hor;' +
         'float s = max(dot(normalize(vP), sunDir), 0.0); c += vec3(1.0,0.86,0.62) * (pow(s, 900.0) * 3.0 + pow(s, 14.0) * 0.28); gl_FragColor = vec4(c, 1.0); }',
     });
-    const sky = new THREE.Mesh(new THREE.SphereGeometry(900, 32, 16), mat);
+    const sky = new THREE.Mesh(new THREE.SphereGeometry(Math.min(900, q.far * 0.92), 32, 16), mat); // must stay inside the camera far plane, otherwise a black hole is cut out of the sky
     sky.frustumCulled = false; sky.renderOrder = -10; scene.add(sky);
     return { sky, sunDir };
   }

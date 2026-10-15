@@ -79,8 +79,8 @@
     const wn = e.cause === 'zone' ? 'the zone' : e.cause === 'fall' ? 'a fall' : CFG.WEAPONS[e.w] ? CFG.WEAPONS[e.w].name : '';
     d.className = 'kf' + (e.killer === myId ? ' mine' : e.victim === myId ? ' me' : '');
     d.innerHTML = (k ? '<b>' + esc(k.name) + '</b> ' : '') + (k ? '&#9656; ' : '') + '<b>' + esc(v.name) + '</b>' + (wn ? ' <i>' + wn + (e.head ? ' &#9679;' : '') + '</i>' : '');
-    f.appendChild(d); while (f.children.length > 5) f.removeChild(f.firstChild);
-    setTimeout(() => d.remove(), 6000);
+    f.appendChild(d); while (f.children.length > (G.innerHeight < 500 ? 3 : 5)) f.removeChild(f.firstChild);
+    setTimeout(() => d.remove(), 5000);
   };
   function esc(s) { return String(s).replace(/[&<>]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' }[c])); }
   H.damage = function (e, me, yaw) { // red flash + arrow towards the attacker

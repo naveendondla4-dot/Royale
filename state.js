@@ -43,9 +43,11 @@
         fireCd: 0, reloadT: 0, healT: 0, fireWas: false, kills: 0, dmgDealt: 0, rank: 0, killedBy: -1, t: 0, lastHit: -99, lastAtt: -1,
         outfit: (rng() * 8) | 0, speed: 0, zoneAcc: 0, ai: null,
       };
+      if (i === 0) p.yaw = yawTo(rx, rz); // the first player faces the way the plane flies
       S.players.push(p);
       if (isBot && BR.Bots) BR.Bots.init(S, p);
     }
+    const h0 = S.players[0]; S.route = { x: h0.x, y: h0.y + 5, z: h0.z, dx: rx, dz: rz, speed: 62 }; // drop plane: starts right above the first player and flies along the route
     S.humanCount = humans.length;
     S.aliveCount = total;
     spawnLoot(S);

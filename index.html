@@ -118,6 +118,7 @@ body.touch #helpKb { display: none; } body:not(.touch) #helpTouch { display: non
 #glwarn { position: fixed; left: 50%; bottom: 8px; transform: translateX(-50%); z-index: 25; background: rgba(160, 30, 20, 0.9); border: 1px solid #ff9a8a; border-radius: 8px; padding: 4px 12px; font-size: 14px; font-weight: 700; }
 
 .build { margin-top: 8px; font-size: 12px; opacity: 0.55; text-align: center; letter-spacing: 1px; }
+@media (max-height: 500px) { .kf { font-size: 12px; padding: 1px 7px; } .kf i { font-size: 11px; } #killfeed { max-width: 38vw; } }
 
 </style>
 </head>
@@ -206,7 +207,7 @@ body.touch #helpKb { display: none; } body:not(.touch) #helpTouch { display: non
     <div class="help hidden" id="installHelp"></div>
     <div class="help" id="helpKb"><b>Keyboard + mouse:</b> WASD move &middot; mouse aim &middot; click fire &middot; right-click / Z scope &middot; Shift run &middot; Space jump &middot; C crouch &middot; R reload &middot; E pick up &middot; Q or 1/2 swap &middot; H heal &middot; M map &middot; Esc pause</div>
     <div class="help" id="helpTouch"><b>Touch:</b> left stick moves &middot; drag the right side to aim &middot; FIRE button (drag while holding to aim) &middot; buttons for jump, crouch, scope, reload, heal, swap, run</div>
-    <div class="build" id="buildTag">build 15-oct-4 &middot; single file</div>
+    <div class="build" id="buildTag">build 15-oct-5 &middot; single file</div>
     <div class="tip">You start in the air: steer toward a house, the parachute opens by itself. Pick up loot, hunt, and survive.</div>
   </div>
 </div>
@@ -838,9 +839,11 @@ body.touch #helpKb { display: none; } body:not(.touch) #helpTouch { display: non
         fireCd: 0, reloadT: 0, healT: 0, fireWas: false, kills: 0, dmgDealt: 0, rank: 0, killedBy: -1, t: 0, lastHit: -99, lastAtt: -1,
         outfit: (rng() * 8) | 0, speed: 0, zoneAcc: 0, ai: null,
       };
+      if (i === 0) p.yaw = yawTo(rx, rz); // the first player faces the way the plane flies
       S.players.push(p);
       if (isBot && BR.Bots) BR.Bots.init(S, p);
     }
+    const h0 = S.players[0]; S.route = { x: h0.x, y: h0.y + 5, z: h0.z, dx: rx, dz: rz, speed: 62 }; // drop plane: starts right above the first player and flies along the route
     S.humanCount = humans.length;
     S.aliveCount = total;
     spawnLoot(S);
@@ -2059,7 +2062,7 @@ body.touch #helpKb { display: none; } body:not(.touch) #helpTouch { display: non
         'void main(){ float h = vP.y; vec3 up = mix(mid, top, smoothstep(0.15, 0.85, h)); vec3 c = mix(hor, up, smoothstep(0.0, 0.4, h)); if (h < 0.0) c = hor;' +
         'float s = max(dot(normalize(vP), sunDir), 0.0); c += vec3(1.0,0.86,0.62) * (pow(s, 900.0) * 3.0 + pow(s, 14.0) * 0.28); gl_FragColor = vec4(c, 1.0); }',
     });
-    const sky = new THREE.Mesh(new THREE.SphereGeometry(900, 32, 16), mat);
+    const sky = new THREE.Mesh(new THREE.SphereGeometry(Math.min(900, q.far * 0.92), 32, 16), mat); // must stay inside the camera far plane, otherwise a black hole is cut out of the sky
     sky.frustumCulled = false; sky.renderOrder = -10; scene.add(sky);
     return { sky, sunDir };
   }
@@ -2134,6 +2137,18 @@ body.touch #helpKb { display: none; } body:not(.touch) #helpTouch { display: non
     { shirt: 0xe07a3a, pants: 0x4a3a2a, helm: 0xa5551f }, { shirt: 0x8d939b, pants: 0x3a3d42, helm: 0x5d636b },
   ];
   const SKINS = [0xf1c8a0, 0xd9a577, 0xb07a4f, 0x7a4f32];
+  // half-sphere parachute with 12 alternating light / dark panels (colour per triangle, so the panel edges are sharp)
+  function paneledCanopy(THREE) {
+    const g = new THREE.SphereGeometry(2.4, 24, 8, 0, Math.PI * 2, 0, Math.PI / 2).scale(1.3, 0.85, 1.3).toNonIndexed();
+    const pa = g.attributes.position.array, col = new Float32Array(pa.length);
+    for (let t = 0; t < pa.length; t += 9) {
+      const cx = (pa[t] + pa[t + 3] + pa[t + 6]) / 3, cz = (pa[t + 2] + pa[t + 5] + pa[t + 8]) / 3;
+      const k = Math.floor(((Math.atan2(cz, cx) + Math.PI) / (2 * Math.PI)) * 12) % 2 ? 1 : 0.5;
+      for (let v = 0; v < 9; v += 3) { col[t + v] = col[t + v + 1] = col[t + v + 2] = k; }
+    }
+    g.setAttribute('color', new THREE.BufferAttribute(col, 3));
+    return g;
+  }
   let shared = null;
   function share(THREE) {
     if (shared) return shared;
@@ -2141,13 +2156,13 @@ body.touch #helpKb { display: none; } body:not(.touch) #helpTouch { display: non
     shared = {
       box: (w, h, d) => new THREE.BoxGeometry(w, h, d),
       shirt: PAL.map((p) => mk(p.shirt)), pants: PAL.map((p) => mk(p.pants)), helm: PAL.map((p) => mk(p.helm)), skin: SKINS.map(mk),
-      dark: mk(0x1d2024), canopy: PAL.map((p) => new THREE.MeshLambertMaterial({ color: new THREE.Color(p.shirt).convertSRGBToLinear(), side: THREE.DoubleSide })),
+      dark: mk(0x1d2024), canopy: PAL.map((p) => new THREE.MeshLambertMaterial({ color: new THREE.Color(p.shirt).convertSRGBToLinear(), vertexColors: true, side: THREE.DoubleSide })),
       line: new THREE.LineBasicMaterial({ color: 0xdddddd }),
     };
     shared.geo = { leg: shared.box(0.2, 0.85, 0.24).translate(0, -0.425, 0), torso: shared.box(0.46, 0.6, 0.26), head: shared.box(0.24, 0.26, 0.24), helm: shared.box(0.29, 0.14, 0.29), visor: shared.box(0.22, 0.06, 0.03), pack: shared.box(0.34, 0.42, 0.16), arm: shared.box(0.13, 0.52, 0.13).translate(0, -0.26, 0),
-      canopy: new THREE.SphereGeometry(2.4, 14, 7, 0, Math.PI * 2, 0, Math.PI / 2).scale(1.3, 0.85, 1.3) };
-    const lg = new THREE.BufferGeometry(), r = 2.4 * 1.3, pts = [];
-    for (let i = 0; i < 4; i++) { const a = (i * Math.PI) / 2 + Math.PI / 4; pts.push(Math.cos(a) * r * 0.9, 3.1, Math.sin(a) * r * 0.9, Math.cos(a) * 0.2, 1.7, Math.sin(a) * 0.1); }
+      canopy: paneledCanopy(THREE) };
+    const lg = new THREE.BufferGeometry(), r = 2.4 * 1.3 * 0.97, pts = [];
+    for (let i = 0; i < 8; i++) { const a = (i * Math.PI) / 4; pts.push(Math.cos(a) * r, 3.1, Math.sin(a) * r, Math.cos(a) * 0.18, 1.75, Math.sin(a) * 0.1); }
     lg.setAttribute('position', new THREE.Float32BufferAttribute(pts, 3)); shared.geo.lines = lg;
     return shared;
   }
@@ -2163,7 +2178,7 @@ body.touch #helpKb { display: none; } body:not(.touch) #helpTouch { display: non
     add(armL, S.geo.arm, S.shirt[o], 0, 0, 0); add(armR, S.geo.arm, S.shirt[o], 0, 0, 0);
     const holder = mk(body, 0.08, 1.2, -0.3);
     const canopy = new THREE.Group();
-    canopy.add(new THREE.Mesh(S.geo.canopy, S.canopy[o])); canopy.add(new THREE.LineSegments(S.geo.lines, S.line)); canopy.position.y = 0.4; canopy.visible = false; root.add(canopy);
+    const dome = new THREE.Mesh(S.geo.canopy, S.canopy[o]); dome.position.y = 3.1; canopy.add(dome); canopy.add(new THREE.LineSegments(S.geo.lines, S.line)); canopy.visible = false; root.add(canopy);
     return { root, body, legL, legR, armL, armR, holder, canopy, gunId: null, gun: null, phase: Math.random() * 6, x: p.x, y: p.y, z: p.z, yaw: p.yaw, lieT: 0 };
   }
   function setGun(THREE, a, id) {
@@ -2190,6 +2205,10 @@ body.touch #helpKb { display: none; } body:not(.touch) #helpTouch { display: non
     }
     a.lieT = 0;
     if (p.air === 'free') { b.rotation.x = -1.4; b.position.y = 1.2; a.legL.rotation.set(0.15, 0, 0.2); a.legR.rotation.set(0.15, 0, -0.2); a.armL.rotation.set(-0.3, 0, -1.3); a.armR.rotation.set(-0.3, 0, 1.3); a.holder.visible = false; return; }
+    if (p.air === 'chute') { // hanging under the canopy: hands up on the lines, legs dangling
+      a.holder.visible = false; a.legL.rotation.set(0.25, 0, 0.06); a.legR.rotation.set(0.15, 0, -0.06);
+      a.armL.rotation.set(2.9, 0, -0.18); a.armR.rotation.set(2.9, 0, 0.18); return;
+    }
     a.holder.visible = true;
     const sw = Math.sin(a.phase) * 0.75 * sp;
     a.legL.rotation.set(sw, 0, 0); a.legR.rotation.set(-sw, 0, 0);
@@ -2199,6 +2218,33 @@ body.touch #helpKb { display: none; } body:not(.touch) #helpTouch { display: non
     a.holder.rotation.x = p.pitch * 0.8;
     if (p.healT > 0 || p.reloadT > 0) { a.armL.rotation.x -= 0.5; a.armR.rotation.x -= 0.5; }
     if (p.air === 'chute') { a.legL.rotation.x = a.legR.rotation.x = 0.1; }
+  }
+
+  // ------------------------------------------------------------------ the drop plane (forward = -Z)
+  function makePlane(THREE) {
+    const M = THREE.Matrix4, WHITE = 0xe9edf0, GREY = 0xa9b3bb, DARK = 0x1f2b34, ORANGE = 0xff7a1a, METAL = 0x6c757c;
+    const B = (w, h, d, x, y, z, hex) => ({ g: new THREE.BoxGeometry(w, h, d), m: new M().makeTranslation(x, y, z), hex });
+    const Cy = (rTop, rBot, len, x, y, z, hex) => ({ g: new THREE.CylinderGeometry(rTop, rBot, len, 16), m: new M().makeRotationX(Math.PI / 2).setPosition(x, y, z), hex }); // top = +Z (tail), bottom = -Z (nose)
+    const parts = [
+      Cy(1.5, 1.5, 15, 0, 0, 0, WHITE), Cy(1.5, 0.45, 4.2, 0, 0, -9.6, WHITE), Cy(0.5, 1.5, 5.4, 0, 0.35, 10.2, WHITE),
+      Cy(1.53, 1.53, 1.3, 0, 0, -1.2, ORANGE),
+      B(2.1, 0.55, 1.3, 0, 0.62, -7.4, DARK),
+      B(26, 0.38, 3.8, 0, 1.25, -0.6, GREY), B(26.2, 0.1, 0.9, 0, 1.28, -2.4, ORANGE),
+      B(0.34, 3.4, 3.0, 0, 3.0, 10.9, WHITE), B(0.36, 1.3, 1.7, 0, 3.7, 11.2, ORANGE), B(9, 0.26, 2.0, 0, 1.4, 11.2, GREY),
+      Cy(0.5, 0.5, 2.8, -6.6, 0.55, -1.3, METAL), Cy(0.5, 0.5, 2.8, 6.6, 0.55, -1.3, METAL), Cy(0.5, 0.5, 2.8, -10.2, 0.55, -1.3, METAL), Cy(0.5, 0.5, 2.8, 10.2, 0.55, -1.3, METAL),
+      B(0.25, 1.1, 1.0, 0, -1.6, 0.2, DARK), B(3.2, 0.2, 0.3, 0, -2.1, 0.2, DARK),
+    ];
+    for (let i = 0; i < 6; i++) parts.push(B(3.06, 0.36, 0.55, 0, 0.35, -4.6 + i * 1.7, DARK)); // window band
+    const root = new THREE.Group(), body = new THREE.Mesh(BR.RenderWorld.mergeParts(THREE, parts), new THREE.MeshLambertMaterial({ vertexColors: true }));
+    root.add(body); root.scale.set(1.25, 1.25, 1.25);
+    const props = [], bm = new THREE.MeshLambertMaterial({ color: new THREE.Color(0x222a30).convertSRGBToLinear(), side: THREE.DoubleSide });
+    for (const x of [-10.2, -6.6, 6.6, 10.2]) {
+      const g = new THREE.Group(); g.position.set(x, 0.55, -2.85);
+      g.add(new THREE.Mesh(new THREE.BoxGeometry(0.22, 3.0, 0.07), bm)); const b2 = new THREE.Mesh(new THREE.BoxGeometry(3.0, 0.22, 0.07), bm); g.add(b2);
+      root.add(g); props.push(g);
+    }
+    root.visible = false;
+    return { root, props };
   }
 
   // ------------------------------------------------------------------ loot on the ground
@@ -2288,7 +2334,7 @@ body.touch #helpKb { display: none; } body:not(.touch) #helpTouch { display: non
     }
   }
 
-  BR.Actors = { gunMesh, makeSoldier, setGun, poseSoldier, makePickup, Effects, flashTexture };
+  BR.Actors = { gunMesh, makeSoldier, setGun, poseSoldier, makePickup, makePlane, Effects, flashTexture };
 })(window);
 
 </script>
@@ -2357,6 +2403,8 @@ body.touch #helpKb { display: none; } body:not(.touch) #helpTouch { display: non
     vg.lhand = part(0.065, 0.07, 0.1, skin, -0.02, -0.04, -0.3); vg.lsleeve = part(0.08, 0.08, 0.3, sleeve, -0.07, -0.1, -0.12, 0.25);
     vg.flash = new THREE.Sprite(new THREE.SpriteMaterial({ map: G.BR.Actors.flashTexture(THREE), blending: THREE.AdditiveBlending, transparent: true, depthWrite: false, depthTest: false })); vg.flash.visible = false;
 
+    R.plane = BR.Actors.makePlane(THREE); scene.add(R.plane.root);
+    R.tp = 1; R._pT = new THREE.Vector3(); R._qT = new THREE.Quaternion(); R._look = new THREE.Vector3();
     R.fx = new BR.Actors.Effects(THREE, scene);
     R.actorGroup = new THREE.Group(); scene.add(R.actorGroup);
     R.pickupGroup = new THREE.Group(); scene.add(R.pickupGroup);
@@ -2385,7 +2433,7 @@ body.touch #helpKb { display: none; } body:not(.touch) #helpTouch { display: non
     for (const a of R.actors) R.actorGroup.remove(a.root);
     R.actors = S.players.map((p) => { const a = BR.Actors.makeSoldier(R.THREE, p); R.actorGroup.add(a.root); return a; });
     for (const e of R.pk.values()) R.pickupGroup.remove(e.g);
-    R.pk.clear(); R.pkT = 0; R.dip = 0;
+    R.pk.clear(); R.pkT = 0; R.dip = 0; R.tp = 1;
   };
 
   R.onEvent = function (S, e, view) {
@@ -2431,26 +2479,38 @@ body.touch #helpKb { display: none; } body:not(.touch) #helpTouch { display: non
     const T = R.THREE, cam = R.camera, me = S.players[view.id], fps = view.mode === 'fps' && me && me.alive, vm = R.vm;
     const baseFov = cam.aspect < 1 ? 95 : 75;
 
-    // ---- camera
+    // ---- camera: first person on the ground; third person while parachuting (so you see yourself, the canopy and the plane) and when spectating
+    const air3p = !!(fps && me.air !== 'ground'), third = !fps || air3p;
     if (me) {
-      if (fps) {
+      const clamp = (v, lo, hi) => (v < lo ? lo : v > hi ? hi : v);
+      const setTp = () => {
+        const a = R.actors[me.id]; if (!a) return;
+        const chute = me.air === 'chute', dist = air3p ? (chute ? 10 : 7.5) : 5.5;
+        const el = air3p ? clamp(0.32 - me.pitch * 0.7, -0.15, 1.25) : 0.35; // look up / down to swing the camera around the jumper
+        const hx = Math.cos(el) * dist;
+        const px = a.x + Math.sin(me.yaw) * hx, pz = a.z + Math.cos(me.yaw) * hx;
+        const py = air3p ? Math.max(a.y + 1.2 + Math.sin(el) * dist, S.world.heightAt(px, pz) + 1.5) : Math.max(a.y + 2.8, S.world.heightAt(px, pz) + 1.5);
+        cam.position.set(px, py, pz);
+        cam.lookAt(a.x, a.y + (air3p ? (chute ? 2.6 : 0.9) : 1.3), a.z);
+      };
+      const setFps = () => {
         if (me.air === 'ground') R.bobT += me.speed * dt * 1.7;
         const amp = me.air === 'ground' && me.onGround ? Math.min(1, me.speed / 5) : 0;
         R.dip = Math.max(0, R.dip - dt * 1.4);
         const eye = BR.Sim.eyeY(me);
         cam.position.set(me.x, eye + Math.abs(Math.sin(R.bobT)) * 0.035 * amp - Math.sin(Math.min(1, R.dip / 0.3) * 3.14) * 0.1 * R.dip, me.z);
         cam.rotation.set(me.pitch + me.recoil, me.yaw, Math.cos(R.bobT) * 0.008 * amp);
+      };
+      if (third) R.tp = 1; else R.tp = Math.max(0, R.tp - dt * 3.2);
+      if (fps && !air3p && R.tp > 0.002) { // just landed: glide from the third-person view into the eyes
+        setTp(); R._pT.copy(cam.position); R._qT.copy(cam.quaternion);
+        setFps(); const k = R.tp * R.tp; cam.position.lerp(R._pT, k); cam.quaternion.slerp(R._qT, k);
+      } else if (third) setTp(); else setFps();
+      if (fps && !air3p) {
         const zoom = me.scope ? ui.scopeZoom || 1 : 1;
-        const tf = (2 * Math.atan(Math.tan((baseFov * Math.PI) / 360) / zoom) * 180) / Math.PI + (me.speed > 6 && !me.scope ? 4 : 0) + (me.air === 'free' ? 10 : 0);
+        const tf = (2 * Math.atan(Math.tan((baseFov * Math.PI) / 360) / zoom) * 180) / Math.PI + (me.speed > 6 && !me.scope ? 4 : 0);
         R.fov += (tf - R.fov) * Math.min(1, 14 * dt);
-      } else {
-        const a = R.actors[me.id];
-        if (a) {
-          const px = a.x + Math.sin(me.yaw) * 5.5, pz = a.z + Math.cos(me.yaw) * 5.5, py = Math.max(a.y + 2.8, S.world.heightAt(px, pz) + 1.5);
-          cam.position.set(px, py, pz); cam.lookAt(a.x, a.y + 1.3, a.z);
-        }
-        R.fov += (baseFov - R.fov) * Math.min(1, 6 * dt);
-      }
+      } else R.fov += (baseFov - R.fov) * Math.min(1, 6 * dt);
       if (Math.abs(cam.fov - R.fov) > 0.05) { cam.fov = R.fov; cam.updateProjectionMatrix(); }
     }
     cam.updateMatrixWorld();
@@ -2466,12 +2526,23 @@ body.touch #helpKb { display: none; } body:not(.touch) #helpTouch { display: non
     // ---- soldiers
     for (const p of S.players) {
       const a = R.actors[p.id]; if (!a) continue;
-      const hide = (fps && p.id === view.id) || Math.hypot(p.x - cam.position.x, p.z - cam.position.z) > (p.alive ? 230 : 120) || (p.air !== 'ground' && !p.alive);
+      const hide = (fps && !air3p && p.id === view.id) || Math.hypot(p.x - cam.position.x, p.z - cam.position.z) > (p.alive ? 230 : 120) || (p.air !== 'ground' && !p.alive);
       a.root.visible = !hide;
       if (hide) { a.x = p.x; a.y = p.y; a.z = p.z; continue; }
       const w = p.weapons[p.cur];
       BR.Actors.setGun(T, a, p.alive ? (w ? w.id : null) : null);
       BR.Actors.poseSoldier(a, p, dt, S.time);
+    }
+
+    // ---- drop plane: starts above the first player and flies away along the route
+    const rt = S.route, pl = R.plane;
+    if (rt && pl) {
+      const on = S.time < 24; pl.root.visible = on;
+      if (on) {
+        pl.root.position.set(rt.x + rt.dx * rt.speed * S.time, rt.y, rt.z + rt.dz * rt.speed * S.time);
+        pl.root.rotation.y = Math.atan2(-rt.dx, -rt.dz);
+        for (const g of pl.props) g.rotation.z += dt * 55;
+      }
     }
 
     // ---- zone walls
@@ -2598,8 +2669,8 @@ body.touch #helpKb { display: none; } body:not(.touch) #helpTouch { display: non
     const wn = e.cause === 'zone' ? 'the zone' : e.cause === 'fall' ? 'a fall' : CFG.WEAPONS[e.w] ? CFG.WEAPONS[e.w].name : '';
     d.className = 'kf' + (e.killer === myId ? ' mine' : e.victim === myId ? ' me' : '');
     d.innerHTML = (k ? '<b>' + esc(k.name) + '</b> ' : '') + (k ? '&#9656; ' : '') + '<b>' + esc(v.name) + '</b>' + (wn ? ' <i>' + wn + (e.head ? ' &#9679;' : '') + '</i>' : '');
-    f.appendChild(d); while (f.children.length > 5) f.removeChild(f.firstChild);
-    setTimeout(() => d.remove(), 6000);
+    f.appendChild(d); while (f.children.length > (G.innerHeight < 500 ? 3 : 5)) f.removeChild(f.firstChild);
+    setTimeout(() => d.remove(), 5000);
   };
   function esc(s) { return String(s).replace(/[&<>]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' }[c])); }
   H.damage = function (e, me, yaw) { // red flash + arrow towards the attacker

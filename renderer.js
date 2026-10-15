@@ -62,6 +62,8 @@
     vg.lhand = part(0.065, 0.07, 0.1, skin, -0.02, -0.04, -0.3); vg.lsleeve = part(0.08, 0.08, 0.3, sleeve, -0.07, -0.1, -0.12, 0.25);
     vg.flash = new THREE.Sprite(new THREE.SpriteMaterial({ map: G.BR.Actors.flashTexture(THREE), blending: THREE.AdditiveBlending, transparent: true, depthWrite: false, depthTest: false })); vg.flash.visible = false;
 
+    R.plane = BR.Actors.makePlane(THREE); scene.add(R.plane.root);
+    R.tp = 1; R._pT = new THREE.Vector3(); R._qT = new THREE.Quaternion(); R._look = new THREE.Vector3();
     R.fx = new BR.Actors.Effects(THREE, scene);
     R.actorGroup = new THREE.Group(); scene.add(R.actorGroup);
     R.pickupGroup = new THREE.Group(); scene.add(R.pickupGroup);
@@ -90,7 +92,7 @@
     for (const a of R.actors) R.actorGroup.remove(a.root);
     R.actors = S.players.map((p) => { const a = BR.Actors.makeSoldier(R.THREE, p); R.actorGroup.add(a.root); return a; });
     for (const e of R.pk.values()) R.pickupGroup.remove(e.g);
-    R.pk.clear(); R.pkT = 0; R.dip = 0;
+    R.pk.clear(); R.pkT = 0; R.dip = 0; R.tp = 1;
   };
 
   R.onEvent = function (S, e, view) {
@@ -136,26 +138,38 @@
     const T = R.THREE, cam = R.camera, me = S.players[view.id], fps = view.mode === 'fps' && me && me.alive, vm = R.vm;
     const baseFov = cam.aspect < 1 ? 95 : 75;
 
-    // ---- camera
+    // ---- camera: first person on the ground; third person while parachuting (so you see yourself, the canopy and the plane) and when spectating
+    const air3p = !!(fps && me.air !== 'ground'), third = !fps || air3p;
     if (me) {
-      if (fps) {
+      const clamp = (v, lo, hi) => (v < lo ? lo : v > hi ? hi : v);
+      const setTp = () => {
+        const a = R.actors[me.id]; if (!a) return;
+        const chute = me.air === 'chute', dist = air3p ? (chute ? 10 : 7.5) : 5.5;
+        const el = air3p ? clamp(0.32 - me.pitch * 0.7, -0.15, 1.25) : 0.35; // look up / down to swing the camera around the jumper
+        const hx = Math.cos(el) * dist;
+        const px = a.x + Math.sin(me.yaw) * hx, pz = a.z + Math.cos(me.yaw) * hx;
+        const py = air3p ? Math.max(a.y + 1.2 + Math.sin(el) * dist, S.world.heightAt(px, pz) + 1.5) : Math.max(a.y + 2.8, S.world.heightAt(px, pz) + 1.5);
+        cam.position.set(px, py, pz);
+        cam.lookAt(a.x, a.y + (air3p ? (chute ? 2.6 : 0.9) : 1.3), a.z);
+      };
+      const setFps = () => {
         if (me.air === 'ground') R.bobT += me.speed * dt * 1.7;
         const amp = me.air === 'ground' && me.onGround ? Math.min(1, me.speed / 5) : 0;
         R.dip = Math.max(0, R.dip - dt * 1.4);
         const eye = BR.Sim.eyeY(me);
         cam.position.set(me.x, eye + Math.abs(Math.sin(R.bobT)) * 0.035 * amp - Math.sin(Math.min(1, R.dip / 0.3) * 3.14) * 0.1 * R.dip, me.z);
         cam.rotation.set(me.pitch + me.recoil, me.yaw, Math.cos(R.bobT) * 0.008 * amp);
+      };
+      if (third) R.tp = 1; else R.tp = Math.max(0, R.tp - dt * 3.2);
+      if (fps && !air3p && R.tp > 0.002) { // just landed: glide from the third-person view into the eyes
+        setTp(); R._pT.copy(cam.position); R._qT.copy(cam.quaternion);
+        setFps(); const k = R.tp * R.tp; cam.position.lerp(R._pT, k); cam.quaternion.slerp(R._qT, k);
+      } else if (third) setTp(); else setFps();
+      if (fps && !air3p) {
         const zoom = me.scope ? ui.scopeZoom || 1 : 1;
-        const tf = (2 * Math.atan(Math.tan((baseFov * Math.PI) / 360) / zoom) * 180) / Math.PI + (me.speed > 6 && !me.scope ? 4 : 0) + (me.air === 'free' ? 10 : 0);
+        const tf = (2 * Math.atan(Math.tan((baseFov * Math.PI) / 360) / zoom) * 180) / Math.PI + (me.speed > 6 && !me.scope ? 4 : 0);
         R.fov += (tf - R.fov) * Math.min(1, 14 * dt);
-      } else {
-        const a = R.actors[me.id];
-        if (a) {
-          const px = a.x + Math.sin(me.yaw) * 5.5, pz = a.z + Math.cos(me.yaw) * 5.5, py = Math.max(a.y + 2.8, S.world.heightAt(px, pz) + 1.5);
-          cam.position.set(px, py, pz); cam.lookAt(a.x, a.y + 1.3, a.z);
-        }
-        R.fov += (baseFov - R.fov) * Math.min(1, 6 * dt);
-      }
+      } else R.fov += (baseFov - R.fov) * Math.min(1, 6 * dt);
       if (Math.abs(cam.fov - R.fov) > 0.05) { cam.fov = R.fov; cam.updateProjectionMatrix(); }
     }
     cam.updateMatrixWorld();
@@ -171,12 +185,23 @@
     // ---- soldiers
     for (const p of S.players) {
       const a = R.actors[p.id]; if (!a) continue;
-      const hide = (fps && p.id === view.id) || Math.hypot(p.x - cam.position.x, p.z - cam.position.z) > (p.alive ? 230 : 120) || (p.air !== 'ground' && !p.alive);
+      const hide = (fps && !air3p && p.id === view.id) || Math.hypot(p.x - cam.position.x, p.z - cam.position.z) > (p.alive ? 230 : 120) || (p.air !== 'ground' && !p.alive);
       a.root.visible = !hide;
       if (hide) { a.x = p.x; a.y = p.y; a.z = p.z; continue; }
       const w = p.weapons[p.cur];
       BR.Actors.setGun(T, a, p.alive ? (w ? w.id : null) : null);
       BR.Actors.poseSoldier(a, p, dt, S.time);
+    }
+
+    // ---- drop plane: starts above the first player and flies away along the route
+    const rt = S.route, pl = R.plane;
+    if (rt && pl) {
+      const on = S.time < 24; pl.root.visible = on;
+      if (on) {
+        pl.root.position.set(rt.x + rt.dx * rt.speed * S.time, rt.y, rt.z + rt.dz * rt.speed * S.time);
+        pl.root.rotation.y = Math.atan2(-rt.dx, -rt.dz);
+        for (const g of pl.props) g.rotation.z += dt * 55;
+      }
     }
 
     // ---- zone walls

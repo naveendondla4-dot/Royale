@@ -22,7 +22,7 @@
   const M = {
     S: null, net: null, quality: 'medium', loading: false, worldBuilt: false, paused: false, mapOpen: false,
     spectating: false, specId: -1, endT: -1, endShown: false, deathInfo: null,
-    last: 0, spread: 8, stepAcc: 0, windT: 0, zoneTickT: 0, mapT: 0, errors: [], frameErrs: 0,
+    gl: [], deferredInstall: null, last: 0, spread: 8, stepAcc: 0, windT: 0, zoneTickT: 0, mapT: 0, errors: [], frameErrs: 0,
     view: { id: 0, mode: 'fps' }, ui: { scopeZoom: 1 },
   };
 
@@ -44,9 +44,16 @@
     if (G.console) console.error(e);
     let msg = (e && e.message) || String(e);
     if (/WebGL|context/i.test(msg)) msg += ' - this device or browser could not start WebGL 3D graphics. Try Chrome, or lower the graphics setting.';
+    if (M.gl.length) msg += ' | ' + M.gl.slice(0, 3).join(' | ');
     $('errTxt').textContent = msg;
-    M.loading = false; hide('loading'); show('err'); exitLock(); I.setEnabled(false);
+    hide('btnErrClose'); M.loading = false; hide('loading'); show('err'); exitLock(); I.setEnabled(false);
   }
+  // Three.js reports shader / WebGL trouble through console.error: keep those lines and offer a way to read them
+  const origConsoleError = console.error;
+  console.error = function () {
+    try { const m = Array.prototype.slice.call(arguments).map(String).join(' '); if (/THREE|WebGL|shader|GLSL/i.test(m)) { M.gl.push(m.slice(0, 260)); show('glwarn'); } } catch (_) {}
+    return origConsoleError.apply(console, arguments);
+  };
   G.addEventListener('error', (ev) => { log((ev.message || 'error') + ' @' + (ev.filename || '').split('/').pop() + ':' + ev.lineno); if (M.loading) fail(ev.error || new Error(ev.message)); });
   G.addEventListener('unhandledrejection', (ev) => { log('promise: ' + (ev.reason && ev.reason.message || ev.reason)); if (M.loading) fail(ev.reason || new Error('Unknown error')); });
 
@@ -266,6 +273,22 @@
     }
   }
 
+  // ------------------------------------------------------------------ install as an app (PWA)
+  function setupInstall() {
+    const standalone = (G.matchMedia && G.matchMedia('(display-mode: standalone)').matches) || (G.matchMedia && G.matchMedia('(display-mode: fullscreen)').matches) || navigator.standalone;
+    if (!standalone && (I.touch || qs.get('install'))) show('btnInstall');
+    G.addEventListener('beforeinstallprompt', (e) => { e.preventDefault(); M.deferredInstall = e; if (!standalone) show('btnInstall'); });
+    G.addEventListener('appinstalled', () => { M.deferredInstall = null; hide('btnInstall'); hide('installHelp'); });
+    $('btnInstall').addEventListener('click', () => {
+      const d = M.deferredInstall;
+      if (d) { d.prompt(); const done = () => { M.deferredInstall = null; hide('btnInstall'); }; if (d.userChoice && d.userChoice.then) d.userChoice.then(done, done); return; }
+      const ios = /iphone|ipad|ipod/i.test(navigator.userAgent);
+      $('installHelp').textContent = ios ? 'iPhone / iPad: tap the Share button in Safari, then "Add to Home Screen".' : 'Open the browser menu (three dots) and choose "Install app" or "Add to Home screen".';
+      show('installHelp');
+    });
+    if ('serviceWorker' in navigator && /^https?:$/.test(location.protocol)) navigator.serviceWorker.register('sw.js').catch(() => {});
+  }
+
   // ------------------------------------------------------------------ boot: menu wiring
   function boot() {
     I.init(); H.init();
@@ -302,6 +325,11 @@
     document.addEventListener('visibilitychange', () => { if (document.hidden) doPause(); });
     document.addEventListener('contextmenu', (e) => { if (M.S) e.preventDefault(); });
 
+    $('glwarn').addEventListener('click', () => { $('errTxt').textContent = M.gl.slice(0, 4).join(' | ') || 'No details'; show('btnErrClose'); show('err'); });
+    $('btnErrClose').addEventListener('click', () => hide('err'));
+    $('view').addEventListener('webglcontextlost', (e) => { e.preventDefault(); fail(new Error('The graphics context was lost (the device ran out of graphics memory). Reload and choose Low graphics.')); });
+    setupInstall();
+    const bt = $('buildTag'); if (bt) bt.textContent += ' \u00b7 ready';
     G.requestAnimationFrame(frame);
     if (qs.get('auto')) startMatch();
   }

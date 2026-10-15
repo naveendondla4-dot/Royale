@@ -41,6 +41,18 @@
     { shirt: 0xe07a3a, pants: 0x4a3a2a, helm: 0xa5551f }, { shirt: 0x8d939b, pants: 0x3a3d42, helm: 0x5d636b },
   ];
   const SKINS = [0xf1c8a0, 0xd9a577, 0xb07a4f, 0x7a4f32];
+  // half-sphere parachute with 12 alternating light / dark panels (colour per triangle, so the panel edges are sharp)
+  function paneledCanopy(THREE) {
+    const g = new THREE.SphereGeometry(2.4, 24, 8, 0, Math.PI * 2, 0, Math.PI / 2).scale(1.3, 0.85, 1.3).toNonIndexed();
+    const pa = g.attributes.position.array, col = new Float32Array(pa.length);
+    for (let t = 0; t < pa.length; t += 9) {
+      const cx = (pa[t] + pa[t + 3] + pa[t + 6]) / 3, cz = (pa[t + 2] + pa[t + 5] + pa[t + 8]) / 3;
+      const k = Math.floor(((Math.atan2(cz, cx) + Math.PI) / (2 * Math.PI)) * 12) % 2 ? 1 : 0.5;
+      for (let v = 0; v < 9; v += 3) { col[t + v] = col[t + v + 1] = col[t + v + 2] = k; }
+    }
+    g.setAttribute('color', new THREE.BufferAttribute(col, 3));
+    return g;
+  }
   let shared = null;
   function share(THREE) {
     if (shared) return shared;
@@ -48,13 +60,13 @@
     shared = {
       box: (w, h, d) => new THREE.BoxGeometry(w, h, d),
       shirt: PAL.map((p) => mk(p.shirt)), pants: PAL.map((p) => mk(p.pants)), helm: PAL.map((p) => mk(p.helm)), skin: SKINS.map(mk),
-      dark: mk(0x1d2024), canopy: PAL.map((p) => new THREE.MeshLambertMaterial({ color: new THREE.Color(p.shirt).convertSRGBToLinear(), side: THREE.DoubleSide })),
+      dark: mk(0x1d2024), canopy: PAL.map((p) => new THREE.MeshLambertMaterial({ color: new THREE.Color(p.shirt).convertSRGBToLinear(), vertexColors: true, side: THREE.DoubleSide })),
       line: new THREE.LineBasicMaterial({ color: 0xdddddd }),
     };
     shared.geo = { leg: shared.box(0.2, 0.85, 0.24).translate(0, -0.425, 0), torso: shared.box(0.46, 0.6, 0.26), head: shared.box(0.24, 0.26, 0.24), helm: shared.box(0.29, 0.14, 0.29), visor: shared.box(0.22, 0.06, 0.03), pack: shared.box(0.34, 0.42, 0.16), arm: shared.box(0.13, 0.52, 0.13).translate(0, -0.26, 0),
-      canopy: new THREE.SphereGeometry(2.4, 14, 7, 0, Math.PI * 2, 0, Math.PI / 2).scale(1.3, 0.85, 1.3) };
-    const lg = new THREE.BufferGeometry(), r = 2.4 * 1.3, pts = [];
-    for (let i = 0; i < 4; i++) { const a = (i * Math.PI) / 2 + Math.PI / 4; pts.push(Math.cos(a) * r * 0.9, 3.1, Math.sin(a) * r * 0.9, Math.cos(a) * 0.2, 1.7, Math.sin(a) * 0.1); }
+      canopy: paneledCanopy(THREE) };
+    const lg = new THREE.BufferGeometry(), r = 2.4 * 1.3 * 0.97, pts = [];
+    for (let i = 0; i < 8; i++) { const a = (i * Math.PI) / 4; pts.push(Math.cos(a) * r, 3.1, Math.sin(a) * r, Math.cos(a) * 0.18, 1.75, Math.sin(a) * 0.1); }
     lg.setAttribute('position', new THREE.Float32BufferAttribute(pts, 3)); shared.geo.lines = lg;
     return shared;
   }
@@ -70,7 +82,7 @@
     add(armL, S.geo.arm, S.shirt[o], 0, 0, 0); add(armR, S.geo.arm, S.shirt[o], 0, 0, 0);
     const holder = mk(body, 0.08, 1.2, -0.3);
     const canopy = new THREE.Group();
-    canopy.add(new THREE.Mesh(S.geo.canopy, S.canopy[o])); canopy.add(new THREE.LineSegments(S.geo.lines, S.line)); canopy.position.y = 0.4; canopy.visible = false; root.add(canopy);
+    const dome = new THREE.Mesh(S.geo.canopy, S.canopy[o]); dome.position.y = 3.1; canopy.add(dome); canopy.add(new THREE.LineSegments(S.geo.lines, S.line)); canopy.visible = false; root.add(canopy);
     return { root, body, legL, legR, armL, armR, holder, canopy, gunId: null, gun: null, phase: Math.random() * 6, x: p.x, y: p.y, z: p.z, yaw: p.yaw, lieT: 0 };
   }
   function setGun(THREE, a, id) {
@@ -97,6 +109,10 @@
     }
     a.lieT = 0;
     if (p.air === 'free') { b.rotation.x = -1.4; b.position.y = 1.2; a.legL.rotation.set(0.15, 0, 0.2); a.legR.rotation.set(0.15, 0, -0.2); a.armL.rotation.set(-0.3, 0, -1.3); a.armR.rotation.set(-0.3, 0, 1.3); a.holder.visible = false; return; }
+    if (p.air === 'chute') { // hanging under the canopy: hands up on the lines, legs dangling
+      a.holder.visible = false; a.legL.rotation.set(0.25, 0, 0.06); a.legR.rotation.set(0.15, 0, -0.06);
+      a.armL.rotation.set(2.9, 0, -0.18); a.armR.rotation.set(2.9, 0, 0.18); return;
+    }
     a.holder.visible = true;
     const sw = Math.sin(a.phase) * 0.75 * sp;
     a.legL.rotation.set(sw, 0, 0); a.legR.rotation.set(-sw, 0, 0);
@@ -106,6 +122,33 @@
     a.holder.rotation.x = p.pitch * 0.8;
     if (p.healT > 0 || p.reloadT > 0) { a.armL.rotation.x -= 0.5; a.armR.rotation.x -= 0.5; }
     if (p.air === 'chute') { a.legL.rotation.x = a.legR.rotation.x = 0.1; }
+  }
+
+  // ------------------------------------------------------------------ the drop plane (forward = -Z)
+  function makePlane(THREE) {
+    const M = THREE.Matrix4, WHITE = 0xe9edf0, GREY = 0xa9b3bb, DARK = 0x1f2b34, ORANGE = 0xff7a1a, METAL = 0x6c757c;
+    const B = (w, h, d, x, y, z, hex) => ({ g: new THREE.BoxGeometry(w, h, d), m: new M().makeTranslation(x, y, z), hex });
+    const Cy = (rTop, rBot, len, x, y, z, hex) => ({ g: new THREE.CylinderGeometry(rTop, rBot, len, 16), m: new M().makeRotationX(Math.PI / 2).setPosition(x, y, z), hex }); // top = +Z (tail), bottom = -Z (nose)
+    const parts = [
+      Cy(1.5, 1.5, 15, 0, 0, 0, WHITE), Cy(1.5, 0.45, 4.2, 0, 0, -9.6, WHITE), Cy(0.5, 1.5, 5.4, 0, 0.35, 10.2, WHITE),
+      Cy(1.53, 1.53, 1.3, 0, 0, -1.2, ORANGE),
+      B(2.1, 0.55, 1.3, 0, 0.62, -7.4, DARK),
+      B(26, 0.38, 3.8, 0, 1.25, -0.6, GREY), B(26.2, 0.1, 0.9, 0, 1.28, -2.4, ORANGE),
+      B(0.34, 3.4, 3.0, 0, 3.0, 10.9, WHITE), B(0.36, 1.3, 1.7, 0, 3.7, 11.2, ORANGE), B(9, 0.26, 2.0, 0, 1.4, 11.2, GREY),
+      Cy(0.5, 0.5, 2.8, -6.6, 0.55, -1.3, METAL), Cy(0.5, 0.5, 2.8, 6.6, 0.55, -1.3, METAL), Cy(0.5, 0.5, 2.8, -10.2, 0.55, -1.3, METAL), Cy(0.5, 0.5, 2.8, 10.2, 0.55, -1.3, METAL),
+      B(0.25, 1.1, 1.0, 0, -1.6, 0.2, DARK), B(3.2, 0.2, 0.3, 0, -2.1, 0.2, DARK),
+    ];
+    for (let i = 0; i < 6; i++) parts.push(B(3.06, 0.36, 0.55, 0, 0.35, -4.6 + i * 1.7, DARK)); // window band
+    const root = new THREE.Group(), body = new THREE.Mesh(BR.RenderWorld.mergeParts(THREE, parts), new THREE.MeshLambertMaterial({ vertexColors: true }));
+    root.add(body); root.scale.set(1.25, 1.25, 1.25);
+    const props = [], bm = new THREE.MeshLambertMaterial({ color: new THREE.Color(0x222a30).convertSRGBToLinear(), side: THREE.DoubleSide });
+    for (const x of [-10.2, -6.6, 6.6, 10.2]) {
+      const g = new THREE.Group(); g.position.set(x, 0.55, -2.85);
+      g.add(new THREE.Mesh(new THREE.BoxGeometry(0.22, 3.0, 0.07), bm)); const b2 = new THREE.Mesh(new THREE.BoxGeometry(3.0, 0.22, 0.07), bm); g.add(b2);
+      root.add(g); props.push(g);
+    }
+    root.visible = false;
+    return { root, props };
   }
 
   // ------------------------------------------------------------------ loot on the ground
@@ -195,5 +238,5 @@
     }
   }
 
-  BR.Actors = { gunMesh, makeSoldier, setGun, poseSoldier, makePickup, Effects, flashTexture };
+  BR.Actors = { gunMesh, makeSoldier, setGun, poseSoldier, makePickup, makePlane, Effects, flashTexture };
 })(window);
